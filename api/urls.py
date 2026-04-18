@@ -18,7 +18,7 @@ urlpatterns = [
     
     # Courses
     path('courses/', views.manage_courses, name='manage-courses'),
-    
+    path('courses/<int:pk>/', views.course_detail, name='course-detail'), # <-- NUEVA LÍNEA
     # Sections 
     path('section-form-data/', views.get_section_form_data, name='section-form-data'),
     path('sections/', views.manage_sections, name='manage-sections'),

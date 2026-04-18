@@ -22,7 +22,7 @@ function App() {
 
         {/* Protected Routes (Wrapped in MainLayout) */}
         
-        {/* Dev 1: Administration Module */}
+        {/* Administration Module */}
         <Route path="/students" element={
           <ProtectedPage>
             <Students />
@@ -41,7 +41,7 @@ function App() {
           </ProtectedPage>
         } />
 
-        {/* Dev 2: Transactional Module */}
+        {/* Transactional Module */}
         <Route path="/enrollments" element={
           <ProtectedPage>
             <h2>Enrollments</h2>

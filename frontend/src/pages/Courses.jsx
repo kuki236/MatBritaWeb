@@ -45,23 +45,18 @@ export default function Courses() {
     };
 
     // --- LOGIC: BUILD THE PATHWAY CHAINS ---
-    // This function takes all courses in a level and sorts them by their prerequisite chain
-    // (e.g., Basic 1 -> Basic 2 -> Basic 3) so they render in a perfect vertical line.
     const getSortedChain = (levelId) => {
         const levelCourses = courses.filter(c => c.level_id === levelId);
         if (levelCourses.length === 0) return [];
 
         const sorted = [];
-        // Find the "root" course (either it has no prerequisite, or its prerequisite is from a different level)
         let current = levelCourses.find(c => !c.prerequisite_id || !levelCourses.some(lc => lc.course_id === c.prerequisite_id));
         
-        // Follow the chain
         while (current) {
             sorted.push(current);
             current = levelCourses.find(c => c.prerequisite_id === current.course_id);
         }
         
-        // Append any orphans (failsafe just in case the chain is broken)
         levelCourses.forEach(c => {
             if (!sorted.includes(c)) sorted.push(c);
         });
@@ -92,11 +87,10 @@ export default function Courses() {
     };
 
     const handleSave = async () => {
-        try {
+        try {   
             if (editingCourse) {
-                // Note: If you add an update_course procedure later, call it here.
-                // For now, based on your package, we only have create_course.
-                alert("Edit functionality requires backend update_course procedure.");
+                await api.put(`/courses/${editingCourse.course_id}/`, formData);             
+                fetchCourses(); 
             } else {
                 await api.post('/courses/', formData);
                 setDrawerOpen(false);
@@ -211,7 +205,7 @@ export default function Courses() {
                     </Box>
 
                     <Grid container spacing={3}>
-                        <Grid item xs={12}>
+                        <Grid  xs={12}>
                             <TextField 
                                 fullWidth 
                                 label="Course Name" 
@@ -225,7 +219,7 @@ export default function Courses() {
                             />
                         </Grid>
                         
-                        <Grid item xs={12}>
+                        <Grid xs={12}>
                             <TextField 
                                 select 
                                 fullWidth 
@@ -241,7 +235,7 @@ export default function Courses() {
                             </TextField>
                         </Grid>
 
-                        <Grid item xs={12}>
+                        <Grid xs={12}>
                             <TextField 
                                 select 
                                 fullWidth 

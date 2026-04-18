@@ -1,6 +1,5 @@
 from django.shortcuts import render
-from django.contrib.auth.hashers import check_password # <-- IMPORTANTE
-# Create your views here.
+from django.contrib.auth.hashers import check_password
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -8,8 +7,6 @@ from django.db import connection
 
 import datetime
 
-# Clase temporal para engañar a SimpleJWT y que genere el token 
-# con el ID de tu tabla System_User en lugar de la tabla de Django
 class DummyUser:
     def __init__(self, user_id):
         self.id = user_id
@@ -56,15 +53,12 @@ from rest_framework.response import Response
 from django.db import connection
 import datetime
 
-# --- HELPER FUNCTION ---
 def dictfetchall(cursor):
     """Returns all rows from a cursor as a dictionary."""
     columns = [col[0].lower() for col in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-# ==========================================
-# 1. DOCUMENT TYPES (For the Filter Dropdown)
-# ==========================================
+# 1. DOCUMENT TYPES 
 @api_view(['GET'])
 def get_document_types(request):
     try:
@@ -75,17 +69,13 @@ def get_document_types(request):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
-# ==========================================
-# 2. STUDENTS MAIN ENDPOINT (GET, POST)
-# ==========================================
+# 2. STUDENTS
 @api_view(['GET', 'POST'])
 def manage_students(request):
     
-    # --- GET: Fetch list of students for the Table ---
     if request.method == 'GET':
         try:
             with connection.cursor() as cursor:
-                # Raw SQL to fetch the data for the main table
                 query = """
                     SELECT s.student_id, s.student_code, s.document_number, 
                            s.first_name, s.last_name, s.gender, s.email, s.phone,
@@ -105,8 +95,6 @@ def manage_students(request):
         data = request.data
         try:
             with connection.cursor() as cursor:
-                # Call PKG_ADMIN_BASE.create_student
-                # Note: We pass '0' at the end to catch the OUT parameter (p_new_id)
                 result = cursor.callproc('PKG_ADMIN_BASE.create_student', [
                     data.get('doc_type_id'),
                     data.get('document_number'), 
@@ -116,7 +104,7 @@ def manage_students(request):
                     data.get('email'), 
                     data.get('phone'),
                     data.get('birth_date'), 
-                    0 # p_new_id (OUT)
+                    0 
                 ])
                 new_id = result[-1]
                 
@@ -124,27 +112,23 @@ def manage_students(request):
             
         except Exception as e:
             error_msg = str(e)
-            # Handling the specific Oracle Error you defined (-20101)
             if '20101' in error_msg:
                 return Response({
-                    'error': 'El dato ya se encuentra registrado', 
+                    'error': 'The value is already recorded', 
                     'code': 'DUP_VAL_ON_INDEX'
-                }, status=409) # 409 Conflict
+                }, status=409)
             return Response({'error': f'Server Error: {error_msg}'}, status=500)
 
-# ==========================================
-# 3. STUDENT DETAIL ENDPOINT (PUT, DELETE)
-# ==========================================
+# 3. STUDENT DETAIL
 @api_view(['PUT', 'DELETE'])
 def student_detail(request, pk):
     
-    # --- PUT: Update a student (RF01) ---
     if request.method == 'PUT':
         data = request.data
         try:
             with connection.cursor() as cursor:
                 cursor.callproc('PKG_ADMIN_BASE.update_student', [
-                    pk, # p_id
+                    pk,
                     data.get('first_name'),
                     data.get('last_name'),
                     data.get('email'),
@@ -157,11 +141,9 @@ def student_detail(request, pk):
                 return Response({'error': 'Student not found'}, status=404)
             return Response({'error': str(e)}, status=500)
 
-    # --- DELETE: Hard delete using Raw SQL ---
     elif request.method == 'DELETE':
         try:
             with connection.cursor() as cursor:
-                # Execute raw SQL delete
                 cursor.execute("DELETE FROM Student WHERE student_id = %s", [pk])
                 
                 if cursor.rowcount == 0:
@@ -170,79 +152,65 @@ def student_detail(request, pk):
             return Response({'status': 'success', 'message': 'Student deleted correctly'}, status=200)
         except Exception as e:
             error_msg = str(e)
-            # If the student has enrollments, Oracle will throw a Foreign Key constraint error (ORA-02292)
             if 'ORA-02292' in error_msg:
                 return Response({'error': 'Cannot delete student because they have active enrollments.'}, status=400)
             return Response({'error': str(e)}, status=500)
-# ==========================================
-# 4. ACADEMIC LEVELS ENDPOINT (GET, POST)
-# ==========================================
+# 4. ACADEMIC LEVELS 
 @api_view(['GET', 'POST'])
 def manage_academic_levels(request):
     
-    # --- GET: Fetch list of academic levels ---
     if request.method == 'GET':
         try:
             with connection.cursor() as cursor:
-                # Raw SQL to fetch the data
                 cursor.execute("SELECT level_id, name FROM Academic_Level ORDER BY level_id")
                 levels = dictfetchall(cursor)
             return Response(levels, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
-    # --- POST: Create a new academic level (RF03) ---
     elif request.method == 'POST':
         data = request.data
         try:
             with connection.cursor() as cursor:
-                # Call PKG_ADMIN_BASE.create_academic_level
-                # Parameters: p_name (IN), p_new_id (OUT)
                 result = cursor.callproc('PKG_ADMIN_BASE.create_academic_level', [
                     data.get('name'), 
-                    0 # p_new_id (OUT) is the last parameter
+                    0 
                 ])
                 
-                # Safely grab the last item from the result array (the new ID)
                 new_id = result[-1] 
                 
             return Response({'status': 'success', 'level_id': new_id}, status=201)
             
         except Exception as e:
             error_msg = str(e)
-            # Catching duplicate names if your DB has a UNIQUE constraint on 'name'
             if 'DUP_VAL_ON_INDEX' in error_msg or 'ORA-00001' in error_msg:
                 return Response({
                     'error': 'This academic level name already exists.', 
                     'code': 'DUP_VAL_ON_INDEX'
                 }, status=409)
             return Response({'error': f'Server Error: {error_msg}'}, status=500)
-# ==========================================
-# 5. ACADEMIC LEVEL DETAIL ENDPOINT (PUT, DELETE)
-# ==========================================
+# 
+# 5. ACADEMIC LEVEL DETAIL
 @api_view(['PUT', 'DELETE'])
 def academic_level_detail(request, pk):
     
-    # --- PUT: Update an academic level ---
     if request.method == 'PUT':
         data = request.data
         try:
             with connection.cursor() as cursor:
                 cursor.callproc('PKG_ADMIN_BASE.update_academic_level', [
-                    pk, # p_id
-                    data.get('name') # p_name
+                    pk,
+                    data.get('name') 
                 ])
             return Response({'status': 'success', 'message': 'Academic level updated correctly'}, status=200)
         except Exception as e:
             error_msg = str(e)
             if '20103' in error_msg:
                 return Response({'error': 'Academic Level not found'}, status=404)
-            # Just in case they try to rename it to a name that already exists
             if 'DUP_VAL_ON_INDEX' in error_msg or 'ORA-00001' in error_msg:
                 return Response({'error': 'This academic level name already exists.'}, status=409)
             return Response({'error': str(e)}, status=500)
 
-    # --- DELETE: Delete an academic level ---
     elif request.method == 'DELETE':
         try:
             with connection.cursor() as cursor:
@@ -252,23 +220,18 @@ def academic_level_detail(request, pk):
             error_msg = str(e)
             if '20103' in error_msg:
                 return Response({'error': 'Academic Level not found'}, status=404)
-            # Oracle Foreign Key constraint error (blocks deletion if courses are linked)
             if 'ORA-02292' in error_msg:
                 return Response({
                     'error': 'Cannot delete this level because it has active courses linked to it.'
                 }, status=400)
             return Response({'error': str(e)}, status=500)
-# ==========================================
-# 6. COURSES ENDPOINT (GET, POST)
-# ==========================================
+# 6. COURSES 
 @api_view(['GET', 'POST'])
 def manage_courses(request):
     
-    # --- GET: Fetch list of courses with their prerequisites ---
     if request.method == 'GET':
         try:
             with connection.cursor() as cursor:
-                # We use a LEFT JOIN for the prerequisite because "Basic 1" won't have one
                 query = """
                     SELECT 
                         c1.course_id, 
@@ -288,15 +251,11 @@ def manage_courses(request):
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
-    # --- POST: Create a new course (RF03) ---
     elif request.method == 'POST':
         data = request.data
         try:
             with connection.cursor() as cursor:
-                # Call PKG_ADMIN_BASE.create_course
-                # Parameters: p_level, p_name, p_prereq, p_new_id (OUT)
-                
-                # Handle empty prerequisites (e.g., for Basic 1)
+
                 prereq = data.get('prerequisite_id')
                 if prereq == '':
                     prereq = None
@@ -305,7 +264,7 @@ def manage_courses(request):
                     data.get('level_id'), 
                     data.get('name'),
                     prereq,
-                    0 # p_new_id (OUT)
+                    0 
                 ])
                 
                 new_id = result[-1] 
@@ -317,31 +276,47 @@ def manage_courses(request):
             if 'DUP_VAL_ON_INDEX' in error_msg or 'ORA-00001' in error_msg:
                 return Response({'error': 'This course name already exists.'}, status=409)
             return Response({'error': f'Server Error: {error_msg}'}, status=500)
-# ==========================================
-# 7. SECTION MANAGEMENT ENDPOINTS (RF04)
-# ==========================================
+@api_view(['PUT', 'DELETE'])
+def course_detail(request, pk):
+    
+    if request.method == 'PUT':
+        data = request.data
+        try:
+            with connection.cursor() as cursor:
+                prereq = data.get('prerequisite_id')
+                if prereq == '':
+                    prereq = None
+
+                cursor.callproc('PKG_ADMIN_BASE.update_course', [
+                    pk, # p_course_id
+                    data.get('level_id'), 
+                    data.get('name'),
+                    prereq
+                ])
+            return Response({'status': 'success', 'message': 'Course updated correctly'}, status=200)
+        except Exception as e:
+            error_msg = str(e)
+            if 'DUP_VAL_ON_INDEX' in error_msg or 'ORA-00001' in error_msg:
+                return Response({'error': 'This course name already exists.'}, status=409)
+            return Response({'error': error_msg}, status=500)
+# 7. SECTION MANAGEMENT 
 @api_view(['GET'])
 def get_section_form_data(request):
     """Fetches all catalogs needed to populate the React dropdowns in one call."""
     try:
         with connection.cursor() as cursor:
-            # Fetch Courses
             cursor.execute("SELECT course_id, name FROM Course ORDER BY level_id, course_id")
             courses = dictfetchall(cursor)
             
-            # Fetch Terms 
             cursor.execute("SELECT term_id, name FROM Academic_Term WHERE is_active = 1 ORDER BY start_date DESC")
             terms = dictfetchall(cursor)
             
-            # Fetch Teachers (FIXED: Removed WHERE is_active = 1)
             cursor.execute("SELECT teacher_id, first_name, last_name FROM Teacher")
             teachers = dictfetchall(cursor)
             
-            # Fetch Schedules (Includes days_of_week)
             cursor.execute("SELECT schedule_id, description, start_time, end_time, days_of_week FROM Schedule")
             schedules = dictfetchall(cursor)
             
-            # Fetch Classrooms (FIXED: Changed name to code)
             cursor.execute("SELECT classroom_id, code as name, capacity FROM Classroom")
             classrooms = dictfetchall(cursor)
 
@@ -359,7 +334,6 @@ def get_section_form_data(request):
 @api_view(['GET', 'POST'])
 def manage_sections(request):
     
-    # --- GET: Fetch list of all open sections for the main table ---
     if request.method == 'GET':
         try:
             with connection.cursor() as cursor:
@@ -391,12 +365,10 @@ def manage_sections(request):
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
-    # --- POST: Call Oracle to open a new section (RF04) ---
     elif request.method == 'POST':
         data = request.data
         try:
             with connection.cursor() as cursor:
-                # Call PKG_ADMIN_BASE.open_section
                 result = cursor.callproc('PKG_ADMIN_BASE.open_section', [
                     data.get('course_id'),
                     data.get('term_id'),
@@ -404,7 +376,7 @@ def manage_sections(request):
                     data.get('schedule_id'),
                     data.get('classroom_id'),
                     data.get('total_capacity'),
-                    0 # p_new_id (OUT) is always the last parameter
+                    0 
                 ])
                 
                 new_id = result[-1] 
