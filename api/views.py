@@ -320,7 +320,6 @@ def manage_courses(request):
 # ==========================================
 # 7. SECTION MANAGEMENT ENDPOINTS (RF04)
 # ==========================================
-
 @api_view(['GET'])
 def get_section_form_data(request):
     """Fetches all catalogs needed to populate the React dropdowns in one call."""
@@ -330,20 +329,20 @@ def get_section_form_data(request):
             cursor.execute("SELECT course_id, name FROM Course ORDER BY level_id, course_id")
             courses = dictfetchall(cursor)
             
-            # Fetch Terms (e.g., '2026-I', 'Summer 2026')
+            # Fetch Terms 
             cursor.execute("SELECT term_id, name FROM Academic_Term WHERE is_active = 1 ORDER BY start_date DESC")
             terms = dictfetchall(cursor)
             
-            # Fetch Teachers
-            cursor.execute("SELECT teacher_id, first_name, last_name FROM Teacher WHERE is_active = 1")
+            # Fetch Teachers (FIXED: Removed WHERE is_active = 1)
+            cursor.execute("SELECT teacher_id, first_name, last_name FROM Teacher")
             teachers = dictfetchall(cursor)
             
-            # Fetch Schedules (e.g., 'Mon-Wed-Fri 08:00-10:00')
-            cursor.execute("SELECT schedule_id, description FROM Schedule")
+            # Fetch Schedules (Includes days_of_week)
+            cursor.execute("SELECT schedule_id, description, start_time, end_time, days_of_week FROM Schedule")
             schedules = dictfetchall(cursor)
             
-            # Fetch Classrooms (e.g., 'Room 101')
-            cursor.execute("SELECT classroom_id, name, capacity FROM Classroom")
+            # Fetch Classrooms (FIXED: Changed name to code)
+            cursor.execute("SELECT classroom_id, code as name, capacity FROM Classroom")
             classrooms = dictfetchall(cursor)
 
         return Response({
@@ -357,7 +356,6 @@ def get_section_form_data(request):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
-
 @api_view(['GET', 'POST'])
 def manage_sections(request):
     
@@ -365,15 +363,17 @@ def manage_sections(request):
     if request.method == 'GET':
         try:
             with connection.cursor() as cursor:
-                # Joining tables to get readable names instead of just IDs
                 query = """
                     SELECT 
                         s.section_id, 
+                        s.term_id,           -- THIS IS MISSING
+                        s.classroom_id,      -- THIS IS MISSING
+                        s.schedule_id,       -- THIS IS MISSING
                         c.name as course_name, 
                         t.name as term_name, 
                         tch.first_name || ' ' || tch.last_name as teacher_name, 
                         sch.description as schedule_desc, 
-                        cr.name as classroom_name, 
+                        cr.code as classroom_name, 
                         s.total_capacity, 
                         s.available_seats 
                     FROM Section s
@@ -385,6 +385,7 @@ def manage_sections(request):
                     ORDER BY s.section_id DESC
                 """
                 cursor.execute(query)
+                print(cursor)
                 sections = dictfetchall(cursor)
             return Response(sections, status=200)
         except Exception as e:

@@ -19,7 +19,7 @@ urlpatterns = [
     # Courses
     path('courses/', views.manage_courses, name='manage-courses'),
     
-    # Sections (NEW)
+    # Sections 
     path('section-form-data/', views.get_section_form_data, name='section-form-data'),
     path('sections/', views.manage_sections, name='manage-sections'),
 ]

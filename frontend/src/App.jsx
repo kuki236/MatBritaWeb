@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import MainLayout from './components/common/MainLayout';
 import Students from './pages/Students';
 import Courses from './pages/Courses'
+import Sections from './pages/Sections'
 const ProtectedPage = ({ children }) => (
   <MainLayout>
     {children}
@@ -36,8 +37,7 @@ function App() {
 
         <Route path="/sections" element={
           <ProtectedPage>
-            <h2>Section Management</h2>
-            <p>RF04: Open new classrooms and assign schedules.</p>
+            <Sections/>
           </ProtectedPage>
         } />
 
