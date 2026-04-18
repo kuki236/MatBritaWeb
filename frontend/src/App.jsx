@@ -1,23 +1,72 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
+import MainLayout from './components/common/MainLayout';
+
+const ProtectedPage = ({ children }) => (
+  <MainLayout>
+    {children}
+  </MainLayout>
+);
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Redirigir la raíz al login */}
+        {/* Redirect root to login */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         
-        {/* Ruta del Login */}
+        {/* Login Route (Does NOT use MainLayout) */}
         <Route path="/login" element={<Login />} />
 
-        {/* Rutas de prueba para verificar que la redirección por roles funciona */}
-        <Route path="/admin" element={<div style={{padding: '2rem'}}><h2>Módulo de Administración (Dev 1)</h2><p>Aquí van los catálogos y apertura de secciones.</p></div>} />
+        {/* Protected Routes (Wrapped in MainLayout) */}
         
-        <Route path="/recepcion" element={<div style={{padding: '2rem'}}><h2>Módulo Transaccional (Dev 2)</h2><p>Aquí va el proceso de matrícula y aforos.</p></div>} />
+        {/* Dev 1: Administration Module */}
+        <Route path="/students" element={
+          <ProtectedPage>
+            <h2>Student Management</h2>
+            <p>RF01: Manage student records here.</p>
+          </ProtectedPage>
+        } />
+
+        <Route path="/academic-levels" element={
+          <ProtectedPage>
+            <h2>Academic Levels</h2>
+            <p>RF03: Configure basic, intermediate, and advanced structures.</p>
+          </ProtectedPage>
+        } />
+
+        <Route path="/sections" element={
+          <ProtectedPage>
+            <h2>Section Management</h2>
+            <p>RF04: Open new classrooms and assign schedules.</p>
+          </ProtectedPage>
+        } />
+
+        {/* Dev 2: Transactional Module */}
+        <Route path="/enrollments" element={
+          <ProtectedPage>
+            <h2>Enrollments</h2>
+            <p>RF06/RF05/RF07: Register student enrollments with capacity and prerequisite validation.</p>
+          </ProtectedPage>
+        } />
+
+        <Route path="/records" element={
+          <ProtectedPage>
+            <h2>Academic Records</h2>
+            <p>RF02: View student history and approved levels.</p>
+          </ProtectedPage>
+        } />
+
+        {/* Fallback for legacy routes or unknown paths */}
+        <Route path="/admin" element={<Navigate to="/students" replace />} />
+        <Route path="/recepcion" element={<Navigate to="/enrollments" replace />} />
         
-        {/* Ruta comodín para páginas no encontradas */}
-        <Route path="*" element={<h2>404 - Página no encontrada</h2>} />
+        {/* 404 - Not Found */}
+        <Route path="*" element={
+          <div style={{ padding: '2rem', textAlign: 'center' }}>
+            <h2>404 - Page Not Found</h2>
+          </div>
+        } />
       </Routes>
     </BrowserRouter>
   );
