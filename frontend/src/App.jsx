@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import MainLayout from './components/common/MainLayout';
-
+import Students from './pages/Students';
 const ProtectedPage = ({ children }) => (
   <MainLayout>
     {children}
@@ -23,8 +23,7 @@ function App() {
         {/* Dev 1: Administration Module */}
         <Route path="/students" element={
           <ProtectedPage>
-            <h2>Student Management</h2>
-            <p>RF01: Manage student records here.</p>
+            <Students />
           </ProtectedPage>
         } />
 
