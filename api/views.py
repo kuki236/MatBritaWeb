@@ -217,3 +217,199 @@ def manage_academic_levels(request):
                     'code': 'DUP_VAL_ON_INDEX'
                 }, status=409)
             return Response({'error': f'Server Error: {error_msg}'}, status=500)
+# ==========================================
+# 5. ACADEMIC LEVEL DETAIL ENDPOINT (PUT, DELETE)
+# ==========================================
+@api_view(['PUT', 'DELETE'])
+def academic_level_detail(request, pk):
+    
+    # --- PUT: Update an academic level ---
+    if request.method == 'PUT':
+        data = request.data
+        try:
+            with connection.cursor() as cursor:
+                cursor.callproc('PKG_ADMIN_BASE.update_academic_level', [
+                    pk, # p_id
+                    data.get('name') # p_name
+                ])
+            return Response({'status': 'success', 'message': 'Academic level updated correctly'}, status=200)
+        except Exception as e:
+            error_msg = str(e)
+            if '20103' in error_msg:
+                return Response({'error': 'Academic Level not found'}, status=404)
+            # Just in case they try to rename it to a name that already exists
+            if 'DUP_VAL_ON_INDEX' in error_msg or 'ORA-00001' in error_msg:
+                return Response({'error': 'This academic level name already exists.'}, status=409)
+            return Response({'error': str(e)}, status=500)
+
+    # --- DELETE: Delete an academic level ---
+    elif request.method == 'DELETE':
+        try:
+            with connection.cursor() as cursor:
+                cursor.callproc('PKG_ADMIN_BASE.delete_academic_level', [pk])
+            return Response({'status': 'success', 'message': 'Academic level deleted correctly'}, status=200)
+        except Exception as e:
+            error_msg = str(e)
+            if '20103' in error_msg:
+                return Response({'error': 'Academic Level not found'}, status=404)
+            # Oracle Foreign Key constraint error (blocks deletion if courses are linked)
+            if 'ORA-02292' in error_msg:
+                return Response({
+                    'error': 'Cannot delete this level because it has active courses linked to it.'
+                }, status=400)
+            return Response({'error': str(e)}, status=500)
+# ==========================================
+# 6. COURSES ENDPOINT (GET, POST)
+# ==========================================
+@api_view(['GET', 'POST'])
+def manage_courses(request):
+    
+    # --- GET: Fetch list of courses with their prerequisites ---
+    if request.method == 'GET':
+        try:
+            with connection.cursor() as cursor:
+                # We use a LEFT JOIN for the prerequisite because "Basic 1" won't have one
+                query = """
+                    SELECT 
+                        c1.course_id, 
+                        c1.name as course_name, 
+                        l.level_id,
+                        l.name as level_name, 
+                        c1.prerequisite_id, 
+                        c2.name as prereq_name 
+                    FROM Course c1
+                    JOIN Academic_Level l ON c1.level_id = l.level_id
+                    LEFT JOIN Course c2 ON c1.prerequisite_id = c2.course_id
+                    ORDER BY l.level_id, c1.course_id
+                """
+                cursor.execute(query)
+                courses = dictfetchall(cursor)
+            return Response(courses, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    # --- POST: Create a new course (RF03) ---
+    elif request.method == 'POST':
+        data = request.data
+        try:
+            with connection.cursor() as cursor:
+                # Call PKG_ADMIN_BASE.create_course
+                # Parameters: p_level, p_name, p_prereq, p_new_id (OUT)
+                
+                # Handle empty prerequisites (e.g., for Basic 1)
+                prereq = data.get('prerequisite_id')
+                if prereq == '':
+                    prereq = None
+
+                result = cursor.callproc('PKG_ADMIN_BASE.create_course', [
+                    data.get('level_id'), 
+                    data.get('name'),
+                    prereq,
+                    0 # p_new_id (OUT)
+                ])
+                
+                new_id = result[-1] 
+                
+            return Response({'status': 'success', 'course_id': new_id}, status=201)
+            
+        except Exception as e:
+            error_msg = str(e)
+            if 'DUP_VAL_ON_INDEX' in error_msg or 'ORA-00001' in error_msg:
+                return Response({'error': 'This course name already exists.'}, status=409)
+            return Response({'error': f'Server Error: {error_msg}'}, status=500)
+# ==========================================
+# 7. SECTION MANAGEMENT ENDPOINTS (RF04)
+# ==========================================
+
+@api_view(['GET'])
+def get_section_form_data(request):
+    """Fetches all catalogs needed to populate the React dropdowns in one call."""
+    try:
+        with connection.cursor() as cursor:
+            # Fetch Courses
+            cursor.execute("SELECT course_id, name FROM Course ORDER BY level_id, course_id")
+            courses = dictfetchall(cursor)
+            
+            # Fetch Terms (e.g., '2026-I', 'Summer 2026')
+            cursor.execute("SELECT term_id, name FROM Academic_Term WHERE is_active = 1 ORDER BY start_date DESC")
+            terms = dictfetchall(cursor)
+            
+            # Fetch Teachers
+            cursor.execute("SELECT teacher_id, first_name, last_name FROM Teacher WHERE is_active = 1")
+            teachers = dictfetchall(cursor)
+            
+            # Fetch Schedules (e.g., 'Mon-Wed-Fri 08:00-10:00')
+            cursor.execute("SELECT schedule_id, description FROM Schedule")
+            schedules = dictfetchall(cursor)
+            
+            # Fetch Classrooms (e.g., 'Room 101')
+            cursor.execute("SELECT classroom_id, name, capacity FROM Classroom")
+            classrooms = dictfetchall(cursor)
+
+        return Response({
+            'courses': courses,
+            'terms': terms,
+            'teachers': teachers,
+            'schedules': schedules,
+            'classrooms': classrooms
+        }, status=200)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET', 'POST'])
+def manage_sections(request):
+    
+    # --- GET: Fetch list of all open sections for the main table ---
+    if request.method == 'GET':
+        try:
+            with connection.cursor() as cursor:
+                # Joining tables to get readable names instead of just IDs
+                query = """
+                    SELECT 
+                        s.section_id, 
+                        c.name as course_name, 
+                        t.name as term_name, 
+                        tch.first_name || ' ' || tch.last_name as teacher_name, 
+                        sch.description as schedule_desc, 
+                        cr.name as classroom_name, 
+                        s.total_capacity, 
+                        s.available_seats 
+                    FROM Section s
+                    JOIN Course c ON s.course_id = c.course_id
+                    JOIN Academic_Term t ON s.term_id = t.term_id
+                    JOIN Teacher tch ON s.teacher_id = tch.teacher_id
+                    JOIN Schedule sch ON s.schedule_id = sch.schedule_id
+                    JOIN Classroom cr ON s.classroom_id = cr.classroom_id
+                    ORDER BY s.section_id DESC
+                """
+                cursor.execute(query)
+                sections = dictfetchall(cursor)
+            return Response(sections, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    # --- POST: Call Oracle to open a new section (RF04) ---
+    elif request.method == 'POST':
+        data = request.data
+        try:
+            with connection.cursor() as cursor:
+                # Call PKG_ADMIN_BASE.open_section
+                result = cursor.callproc('PKG_ADMIN_BASE.open_section', [
+                    data.get('course_id'),
+                    data.get('term_id'),
+                    data.get('teacher_id'),
+                    data.get('schedule_id'),
+                    data.get('classroom_id'),
+                    data.get('total_capacity'),
+                    0 # p_new_id (OUT) is always the last parameter
+                ])
+                
+                new_id = result[-1] 
+                
+            return Response({'status': 'success', 'section_id': new_id}, status=201)
+            
+        except Exception as e:
+            error_msg = str(e)
+            return Response({'error': f'Server Error: {error_msg}'}, status=500)

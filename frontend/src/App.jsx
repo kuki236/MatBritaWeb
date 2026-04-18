@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import MainLayout from './components/common/MainLayout';
 import Students from './pages/Students';
+import Courses from './pages/Courses'
 const ProtectedPage = ({ children }) => (
   <MainLayout>
     {children}
@@ -29,8 +30,7 @@ function App() {
 
         <Route path="/academic-levels" element={
           <ProtectedPage>
-            <h2>Academic Levels</h2>
-            <p>RF03: Configure basic, intermediate, and advanced structures.</p>
+            <Courses />
           </ProtectedPage>
         } />
 
