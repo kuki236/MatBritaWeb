@@ -97,18 +97,25 @@ def manage_students(request):
             with connection.cursor() as cursor:
                 result = cursor.callproc('PKG_ADMIN_BASE.create_student', [
                     data.get('doc_type_id'),
-                    data.get('document_number'), 
+                    data.get('document_number'),
                     data.get('first_name'),
-                    data.get('last_name'), 
+                    data.get('last_name'),
                     data.get('gender'),
-                    data.get('email'), 
+                    data.get('email'),
                     data.get('phone'),
-                    data.get('birth_date'), 
-                    0 
+                    data.get('birth_date'),
+                    0 # p_new_id (OUT)
                 ])
-                new_id = result[-1]
+                new_student_id = result[-1] 
                 
-            return Response({'status': 'success', 'student_id': new_id}, status=201)
+                placement_course = data.get('placement_course_id')
+                if placement_course:
+                    cursor.execute("""
+                        INSERT INTO Placement_Test (student_id, approved_course_id) 
+                        VALUES (%s, %s)
+                    """, [new_student_id, placement_course])
+
+            return Response({'status': 'success', 'student_id': new_student_id}, status=201)
             
         except Exception as e:
             error_msg = str(e)

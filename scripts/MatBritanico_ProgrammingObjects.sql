@@ -161,14 +161,18 @@ CREATE OR REPLACE PACKAGE BODY PKG_ENROLLMENT_TRANS AS
 
     FUNCTION check_prerequisites(p_student_id IN NUMBER, p_course_id IN NUMBER) RETURN VARCHAR2 IS
         v_prereq_id NUMBER;
-        v_passed NUMBER;
+        v_passed NUMBER := 0;
+        v_placement_approved NUMBER := 0;
     BEGIN
+        -- 1. Find if the target course has a prerequisite
         SELECT prerequisite_id INTO v_prereq_id FROM Course WHERE course_id = p_course_id;
         
+        -- If no prerequisite exists, they can enroll freely.
         IF v_prereq_id IS NULL THEN
             RETURN 'Y';
         END IF;
 
+        -- 2. Check if the student passed the prerequisite course normally
         SELECT COUNT(*) INTO v_passed
         FROM Enrollment e
         JOIN Section s ON e.section_id = s.section_id
@@ -178,9 +182,22 @@ CREATE OR REPLACE PACKAGE BODY PKG_ENROLLMENT_TRANS AS
 
         IF v_passed > 0 THEN
             RETURN 'Y';
-        ELSE
-            RETURN 'ERROR: Student has not passed the prerequisite course.';
         END IF;
+
+        -- 3. NEW LOGIC: Check if the student has a Placement Test for THIS target course
+        -- A record in Placement_Test means they are cleared to take 'approved_course_id'
+        SELECT COUNT(*) INTO v_placement_approved
+        FROM Placement_Test
+        WHERE student_id = p_student_id
+          AND approved_course_id = p_course_id;
+
+        IF v_placement_approved > 0 THEN
+            RETURN 'Y';
+        END IF;
+
+        -- If both checks fail, block enrollment.
+        RETURN 'ERROR: Student has not passed the prerequisite course and has no valid placement test.';
+        
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
             RETURN 'ERROR: Course not found.';
@@ -204,13 +221,12 @@ CREATE OR REPLACE PACKAGE BODY PKG_ENROLLMENT_TRANS AS
 
         SELECT course_id INTO v_target_course_id FROM Section WHERE section_id = p_section;
 
+        -- This call will now check both Enrollment history AND Placement Tests
         v_prereq_check := check_prerequisites(p_student, v_target_course_id);
         IF v_prereq_check != 'Y' THEN
             RAISE_APPLICATION_ERROR(-20202, v_prereq_check);
         END IF;
 
-        -- 4. Ejecutar RF05 (Control de Aforo) con bloqueo de concurrencia
-        -- FOR UPDATE bloquea la fila de Section para que otra recepcionista no asigne el mismo cupo al mismo tiempo
         SELECT available_seats INTO v_available_seats 
         FROM Section WHERE section_id = p_section FOR UPDATE;
 

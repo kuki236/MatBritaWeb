@@ -129,7 +129,14 @@ CREATE TABLE Enrollment (
     CONSTRAINT fk_enroll_section FOREIGN KEY (section_id) REFERENCES Section(section_id),
     CONSTRAINT fk_enroll_user FOREIGN KEY (user_id) REFERENCES System_User(user_id)
 ) TABLESPACE DATA_TABLES_MATBRITANICO;
-    
+CREATE TABLE Placement_Test (
+    placement_id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    student_id NUMBER NOT NULL,
+    approved_course_id NUMBER NOT NULL, 
+    CONSTRAINT fk_placement_student FOREIGN KEY (student_id) REFERENCES Student(student_id),
+    CONSTRAINT fk_placement_course FOREIGN KEY (approved_course_id) REFERENCES Course(course_id)
+)TABLESPACE DATA_TABLES_MATBRITANICO;
+COMMIT;
 -- =======================================================
 -- Indexes on People / Users Tables
 -- =======================================================
