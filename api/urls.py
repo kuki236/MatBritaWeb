@@ -22,4 +22,11 @@ urlpatterns = [
     # Sections 
     path('section-form-data/', views.get_section_form_data, name='section-form-data'),
     path('sections/', views.manage_sections, name='manage-sections'),
+
+    path('enrollments/', views.register_enrollment),
+    path('students/<int:pk>/history/', views.student_history),
+
+    path('sections/<int:section_id>/eligible-students/', views.eligible_students),
+    path('sections/<int:section_id>/enrolled-students/', views.enrolled_students),
+    path('enrollments/<int:section_id>/<int:student_id>/', views.delete_enrollment),    
 ]

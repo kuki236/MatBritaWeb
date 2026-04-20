@@ -164,16 +164,20 @@ CREATE OR REPLACE PACKAGE BODY PKG_ENROLLMENT_TRANS AS
         v_passed NUMBER := 0;
         v_placement_approved NUMBER := 0;
     BEGIN
-        -- 1. Find if the target course has a prerequisite
-        SELECT prerequisite_id INTO v_prereq_id FROM Course WHERE course_id = p_course_id;
+        -- 1. Obtener prerequisito del curso
+        SELECT prerequisite_id 
+        INTO v_prereq_id 
+        FROM Course 
+        WHERE course_id = p_course_id;
         
-        -- If no prerequisite exists, they can enroll freely.
+        -- Si no hay prerequisito → OK
         IF v_prereq_id IS NULL THEN
             RETURN 'Y';
         END IF;
 
-        -- 2. Check if the student passed the prerequisite course normally
-        SELECT COUNT(*) INTO v_passed
+        -- 2. Ver si aprobó el curso prerequisito
+        SELECT COUNT(*) 
+        INTO v_passed
         FROM Enrollment e
         JOIN Section s ON e.section_id = s.section_id
         WHERE e.student_id = p_student_id 
@@ -184,24 +188,25 @@ CREATE OR REPLACE PACKAGE BODY PKG_ENROLLMENT_TRANS AS
             RETURN 'Y';
         END IF;
 
-        -- 3. NEW LOGIC: Check if the student has a Placement Test for THIS target course
-        -- A record in Placement_Test means they are cleared to take 'approved_course_id'
-        SELECT COUNT(*) INTO v_placement_approved
+        -- 3. Ver si tiene placement test válido (CORREGIDO)
+        SELECT COUNT(*) 
+        INTO v_placement_approved
         FROM Placement_Test
         WHERE student_id = p_student_id
-          AND approved_course_id = p_course_id;
+          AND approved_course_id = v_prereq_id;  -- IMPORTANTE: aquí iba el ;
 
         IF v_placement_approved > 0 THEN
             RETURN 'Y';
         END IF;
 
-        -- If both checks fail, block enrollment.
+        -- Si no cumple nada → error
         RETURN 'ERROR: Student has not passed the prerequisite course and has no valid placement test.';
         
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
             RETURN 'ERROR: Course not found.';
     END check_prerequisites;
+
 
     PROCEDURE register_enrollment(
         p_student IN Enrollment.student_id%TYPE, 
@@ -214,38 +219,58 @@ CREATE OR REPLACE PACKAGE BODY PKG_ENROLLMENT_TRANS AS
         v_available_seats NUMBER;
         v_already_enrolled NUMBER;
     BEGIN
-        SELECT COUNT(*) INTO v_already_enrolled FROM Enrollment WHERE student_id = p_student AND section_id = p_section;
+        -- Verificar duplicado
+        SELECT COUNT(*) 
+        INTO v_already_enrolled 
+        FROM Enrollment 
+        WHERE student_id = p_student 
+          AND section_id = p_section;
+
         IF v_already_enrolled > 0 THEN
             RAISE_APPLICATION_ERROR(-20201, 'Student is already enrolled in this section.');
         END IF;
 
-        SELECT course_id INTO v_target_course_id FROM Section WHERE section_id = p_section;
+        -- Obtener curso
+        SELECT course_id 
+        INTO v_target_course_id 
+        FROM Section 
+        WHERE section_id = p_section;
 
-        -- This call will now check both Enrollment history AND Placement Tests
+        -- Validar prerequisitos
         v_prereq_check := check_prerequisites(p_student, v_target_course_id);
         IF v_prereq_check != 'Y' THEN
             RAISE_APPLICATION_ERROR(-20202, v_prereq_check);
         END IF;
 
-        SELECT available_seats INTO v_available_seats 
-        FROM Section WHERE section_id = p_section FOR UPDATE;
+        -- Verificar cupos
+        SELECT available_seats 
+        INTO v_available_seats 
+        FROM Section 
+        WHERE section_id = p_section 
+        FOR UPDATE;
 
         IF v_available_seats <= 0 THEN
             RAISE_APPLICATION_ERROR(-20203, 'Section is full. No seats available.');
         END IF;
 
-        UPDATE Section SET available_seats = available_seats - 1 WHERE section_id = p_section;
+        -- Reducir cupo
+        UPDATE Section 
+        SET available_seats = available_seats - 1 
+        WHERE section_id = p_section;
 
+        -- Insertar matrícula
         INSERT INTO Enrollment(student_id, section_id, user_id, enrollment_date, is_approved)
         VALUES (p_student, p_section, p_user, SYSTIMESTAMP, 0)
         RETURNING enrollment_id INTO p_new_id;
 
         COMMIT;
+
     EXCEPTION
         WHEN OTHERS THEN
             ROLLBACK;
             RAISE;
     END register_enrollment;
+
 
     PROCEDURE record_final_grade(
         p_enrollment_id IN Enrollment.enrollment_id%TYPE,
@@ -263,6 +288,7 @@ CREATE OR REPLACE PACKAGE BODY PKG_ENROLLMENT_TRANS AS
         
         COMMIT;
     END record_final_grade;
+
 
     PROCEDURE get_academic_history(
         p_student_id IN NUMBER,

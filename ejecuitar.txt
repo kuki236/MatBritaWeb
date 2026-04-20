@@ -1,0 +1,8 @@
+backend
+py -3.12 manage.py runserver
+frontend
+npm run dev
+Shell:
+py -3.12 manage.py shell
+Instalar paquetes:
+py -3.12 -m pip install ...

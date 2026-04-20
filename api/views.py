@@ -339,6 +339,7 @@ def get_section_form_data(request):
         return Response({'error': str(e)}, status=500)
 
 @api_view(['GET', 'POST'])
+
 def manage_sections(request):
     
     if request.method == 'GET':
@@ -393,3 +394,187 @@ def manage_sections(request):
         except Exception as e:
             error_msg = str(e)
             return Response({'error': f'Server Error: {error_msg}'}, status=500)
+        
+#Estefanooo
+@api_view(['POST'])
+def register_enrollment(request):
+    data = request.data
+
+    try:
+        with connection.cursor() as cursor:
+            result = cursor.callproc('PKG_ENROLLMENT_TRANS.register_enrollment', [
+                data.get('student_id'),
+                data.get('section_id'),
+                data.get('user_id'),
+                0
+            ])
+
+            new_id = result[-1]
+
+        return Response({
+            'status': 'success',
+            'enrollment_id': new_id
+        }, status=201)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+    
+
+@api_view(['GET'])
+def student_history(request, pk):
+    try:
+        with connection.cursor() as cursor:
+
+            query = """
+                SELECT 
+                    e.enrollment_date,
+                    t.name as term_name,
+                    l.name as level_name,
+                    c.name as course_name,
+                    e.final_grade,
+                    CASE 
+                        WHEN e.is_approved = 1 THEN 'APROBADO'
+                        ELSE 'EN CURSO'
+                    END as status
+                FROM Enrollment e
+                JOIN Section s ON e.section_id = s.section_id
+                JOIN Course c ON s.course_id = c.course_id
+                JOIN Academic_Level l ON c.level_id = l.level_id
+                JOIN Academic_Term t ON s.term_id = t.term_id
+                WHERE e.student_id = %s
+
+                UNION ALL
+
+                SELECT 
+                    NULL as enrollment_date,
+                    'Placement Test' as term_name,
+                    l.name as level_name,
+                    c.name as course_name,
+                    NULL as final_grade,
+                    'UBICACIÓN' as status
+                FROM Placement_Test p
+                JOIN Course c ON p.approved_course_id = c.course_id
+                JOIN Academic_Level l ON c.level_id = l.level_id
+                WHERE p.student_id = %s
+
+                ORDER BY enrollment_date DESC NULLS LAST
+            """
+
+            cursor.execute(query, [pk, pk])
+            rows = dictfetchall(cursor)
+
+        return Response(rows, status=200)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+    
+@api_view(['GET'])
+def eligible_students(request, section_id):
+    try:
+        with connection.cursor() as cursor:
+
+            # 1. Obtener curso actual y su prerequisito
+            cursor.execute("""
+                SELECT s.course_id, c.prerequisite_id
+                FROM Section s
+                JOIN Course c ON s.course_id = c.course_id
+                WHERE s.section_id = %s
+            """, [section_id])
+
+            row = cursor.fetchone()
+
+            if not row:
+                return Response({'error': 'Section not found'}, status=404)
+
+            course_id = row[0]
+            prereq_id = row[1]
+
+            # 2. Obtener estudiantes elegibles
+            cursor.execute("""
+                SELECT st.student_id, st.first_name, st.last_name
+                FROM Student st
+
+                WHERE 
+                    -- ❌ No debe estar ya en esta sección
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM Enrollment e
+                        WHERE e.student_id = st.student_id
+                          AND e.section_id = %s
+                    )
+
+                    -- ❌ No debe estar en otra sección activa (en curso)
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM Enrollment e
+                        WHERE e.student_id = st.student_id
+                          AND e.is_approved = 0
+                    )
+
+                    AND (
+                        -- ✅ Si no hay prerequisito → todos pueden
+                        %s IS NULL
+
+                        -- ✅ Si aprobó el prerequisito en un curso anterior
+                        OR EXISTS (
+                            SELECT 1
+                            FROM Enrollment e
+                            JOIN Section sec ON e.section_id = sec.section_id
+                            WHERE e.student_id = st.student_id
+                              AND sec.course_id = %s
+                              AND e.is_approved = 1
+                        )
+
+                        -- ✅ Si el Placement Test indica exactamente ese nivel
+                        OR EXISTS (
+                            SELECT 1
+                            FROM Placement_Test p
+                            WHERE p.student_id = st.student_id
+                              AND p.approved_course_id = %s
+                        )
+                    )
+
+                ORDER BY st.last_name, st.first_name
+            """, [section_id, prereq_id, prereq_id, prereq_id])
+
+            students = dictfetchall(cursor)
+
+        return Response(students, status=200)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+    
+@api_view(['GET'])
+def enrolled_students(request, section_id):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT st.student_id, st.first_name, st.last_name
+                FROM Enrollment e
+                JOIN Student st ON e.student_id = st.student_id
+                WHERE e.section_id = %s
+            """, [section_id])
+
+            students = dictfetchall(cursor)
+
+        return Response(students, status=200)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+    
+@api_view(['DELETE'])
+def delete_enrollment(request, student_id, section_id):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                DELETE FROM Enrollment
+                WHERE student_id = %s AND section_id = %s
+            """, [student_id, section_id])
+
+            if cursor.rowcount == 0:
+                return Response({'error': 'Enrollment not found'}, status=404)
+
+        return Response({'status': 'deleted'}, status=200)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
