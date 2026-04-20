@@ -308,7 +308,7 @@ def get_section_form_data(request):
             cursor.execute("SELECT course_id, name FROM Course ORDER BY level_id, course_id")
             courses = dictfetchall(cursor)
             
-            cursor.execute("SELECT term_id, name FROM Academic_Term WHERE is_active = 1 ORDER BY start_date DESC")
+            cursor.execute("SELECT term_id, name FROM Academic_Term ORDER BY start_date DESC")
             terms = dictfetchall(cursor)
             
             cursor.execute("SELECT teacher_id, first_name, last_name FROM Teacher")

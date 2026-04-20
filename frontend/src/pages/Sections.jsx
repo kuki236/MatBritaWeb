@@ -189,7 +189,11 @@ export default function Sections() {
                         <Typography variant="h6" fontWeight={700}>Open New Section</Typography>
                         <IconButton onClick={() => setDrawerOpen(false)}><Close /></IconButton>
                     </Box>
-
+                    <Grid xs={12}>
+                            <TextField select fullWidth label="Academic Term" name="term_id" value={formData.term_id} onChange={handleInputChange} size="small">
+                                {catalogs.terms.map(t => <MenuItem key={t.term_id} value={t.term_id}>{t.name}</MenuItem>)}
+                            </TextField>
+                        </Grid>
                     <Grid container spacing={3}>
                         <Grid xs={12}>
                             <TextField select fullWidth label="Course" name="course_id" value={formData.course_id} onChange={handleInputChange} size="small">
