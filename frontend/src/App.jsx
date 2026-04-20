@@ -4,6 +4,8 @@ import MainLayout from './components/common/MainLayout';
 import Students from './pages/Students';
 import Courses from './pages/Courses'
 import Sections from './pages/Sections'
+import Records from './pages/records'
+import Enrollments from './pages/enrollments';
 const ProtectedPage = ({ children }) => (
   <MainLayout>
     {children}
@@ -44,15 +46,13 @@ function App() {
         {/* Transactional Module */}
         <Route path="/enrollments" element={
           <ProtectedPage>
-            <h2>Enrollments</h2>
-            <p>RF06/RF05/RF07: Register student enrollments with capacity and prerequisite validation.</p>
+            <Enrollments />
           </ProtectedPage>
         } />
 
         <Route path="/records" element={
           <ProtectedPage>
-            <h2>Academic Records</h2>
-            <p>RF02: View student history and approved levels.</p>
+            <Records />
           </ProtectedPage>
         } />
 
