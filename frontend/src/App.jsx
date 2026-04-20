@@ -4,8 +4,8 @@ import MainLayout from './components/common/MainLayout';
 import Students from './pages/Students';
 import Courses from './pages/Courses'
 import Sections from './pages/Sections'
-import Records from './pages/Records'
-import Enrollments from './pages/Enrollments';
+import Records from './pages/records'
+import Enrollments from './pages/enrollments';
 const ProtectedPage = ({ children }) => (
   <MainLayout>
     {children}
