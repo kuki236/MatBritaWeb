@@ -473,7 +473,7 @@ def eligible_students(request, section_id):
     try:
         with connection.cursor() as cursor:
 
-            # 1. Obtener curso actual y su prerequisito
+            # Curso actual
             cursor.execute("""
                 SELECT s.course_id, c.prerequisite_id
                 FROM Section s
@@ -489,13 +489,13 @@ def eligible_students(request, section_id):
             course_id = row[0]
             prereq_id = row[1]
 
-            # 2. Obtener estudiantes elegibles
+            # Estudiantes elegibles
             cursor.execute("""
                 SELECT st.student_id, st.first_name, st.last_name
                 FROM Student st
 
                 WHERE 
-                    -- ❌ No debe estar ya en esta sección
+                    -- no ya en la sección
                     NOT EXISTS (
                         SELECT 1
                         FROM Enrollment e
@@ -503,7 +503,7 @@ def eligible_students(request, section_id):
                           AND e.section_id = %s
                     )
 
-                    -- ❌ No debe estar en otra sección activa (en curso)
+                    -- no tener curso activo
                     AND NOT EXISTS (
                         SELECT 1
                         FROM Enrollment e
@@ -512,10 +512,18 @@ def eligible_students(request, section_id):
                     )
 
                     AND (
-                        -- ✅ Si no hay prerequisito → todos pueden
-                        %s IS NULL
 
-                        -- ✅ Si aprobó el prerequisito en un curso anterior
+                        -- SOLO SI NO TIENE PLACEMENT → puede entrar a cursos base
+                        (
+                            %s IS NULL
+                            AND NOT EXISTS (
+                                SELECT 1
+                                FROM Placement_Test p
+                                WHERE p.student_id = st.student_id
+                            )
+                        )
+
+                        -- aprobó prerequisito
                         OR EXISTS (
                             SELECT 1
                             FROM Enrollment e
@@ -525,7 +533,7 @@ def eligible_students(request, section_id):
                               AND e.is_approved = 1
                         )
 
-                        -- ✅ Si el Placement Test indica exactamente ese nivel
+                        -- placement coincide EXACTO con prerequisito
                         OR EXISTS (
                             SELECT 1
                             FROM Placement_Test p
@@ -562,19 +570,28 @@ def enrolled_students(request, section_id):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
     
+
+    
 @api_view(['DELETE'])
-def delete_enrollment(request, student_id, section_id):
+def delete_enrollment(request, section_id, student_id):
     try:
         with connection.cursor() as cursor:
+
+            # eliminar matrícula
             cursor.execute("""
                 DELETE FROM Enrollment
-                WHERE student_id = %s AND section_id = %s
+                WHERE student_id = %s
+                AND section_id = %s
             """, [student_id, section_id])
 
-            if cursor.rowcount == 0:
-                return Response({'error': 'Enrollment not found'}, status=404)
+            # devolver cupo
+            cursor.execute("""
+                UPDATE Section
+                SET available_seats = available_seats + 1
+                WHERE section_id = %s
+            """, [section_id])
 
         return Response({'status': 'deleted'}, status=200)
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({'error': str(e)}, status=400)

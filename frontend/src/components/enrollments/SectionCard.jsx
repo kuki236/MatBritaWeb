@@ -19,7 +19,6 @@ export default function SectionCard({ section, onEnroll, onView }) {
     >
       <CardContent sx={{ p: 1 }}>
 
-        {/* CONTENIDO ORDENADO CON STACK */}
         <Stack spacing={1.5}>
 
           {/* TITLE */}
